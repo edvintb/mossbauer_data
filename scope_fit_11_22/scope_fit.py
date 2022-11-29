@@ -24,8 +24,8 @@ def cos_params_from_data(plot=False):
     ax.legend(loc='upper left')
     # print(cos_function(0, *popt))
     fig.show()
-    input("hit [enter] to close plots")
-    plt.close(fig)
+    # input("hit [enter] to close plots")
+    # plt.close(fig)
     
   return (full_popt, simple_popt)
 
