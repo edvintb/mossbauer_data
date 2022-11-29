@@ -31,11 +31,5 @@ def cos_params_from_data(plot=False):
 
 def voltage_from_time_diff(time_diff, amp, ang_freq):
   voltage = amp * np.cos(0.5 * (2 * np.pi - ang_freq * time_diff))
-
-  fig, ax = plt.subplots()
-
-  ax.plot()
-
-
   return voltage
 
