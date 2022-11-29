@@ -22,7 +22,7 @@ time_arr, total_count_arr = np.loadtxt(folder_name + highest_numbered_file, deli
 
 # Plot data to check where fits need to happen
 fig1, ax1 = plt.subplots()
-ax1.scatter(time_arr, total_count_arr, label='Raw counts', linewidths=0.5)
+ax1.scatter(time_arr, total_count_arr, label='Raw counts', marker='.')
 ax1.set_title('Counts vs. Time')
 ax1.set_yscale("linear")
 ax1.set_xscale("linear")
@@ -85,36 +85,61 @@ fig2.show()
 
 # Get velocity for peak through difference
 num_distinct_peaks = int(number_peaks/2)
-amp, ang_freq, phase_transducer, shift = scope_fit.cos_params_from_data()
+(full_amp, full_ang_freq, full_phase, full_shift), (simple_amp, simple_ang_freq)  = scope_fit.cos_params_from_data(plot=False)
 velocity_voltage_ratio=0.080523086265892;
-peak_velocity_matrix = np.zeros((num_distinct_peaks, 3))
+peak_velocity_matrix = np.zeros((num_distinct_peaks, 5))
+print('Opt param matrix[0]: \n{}'.format(opt_param_matrix))
 for index in range(num_distinct_peaks):
   left_peak_time = opt_param_matrix[index][0]
-  right_peak_time = opt_param_matrix[-index][0]
+  left_peak_uncertain = np.sqrt(np.diag(cov_matrix[index]))[2]
+  right_peak_time = opt_param_matrix[-index - 1][0]
+  right_peak_uncertain = np.sqrt(np.diag(cov_matrix[-index]))[2]
+  # print('Left peak time: {}, right peak time: {}'.format(left_peak_time, right_peak_time))
   time_diff = right_peak_time - left_peak_time
-  peak_voltage = scope_fit.voltage_from_time_diff(time_diff, amp, ang_freq)
-  peak_velocity = peak_voltage * velocity_voltage_ratio
-  peak_velocity_matrix[index] = [left_peak_time, peak_velocity, right_peak_time]
+  full_voltage_from_diff = scope_fit.voltage_from_time_diff(time_diff, full_amp, full_ang_freq)
+  simple_voltage_from_diff = scope_fit.voltage_from_time_diff(time_diff, simple_amp, simple_ang_freq) 
+  # Using the peak for the two fits
+  full_peak_velocity = full_voltage_from_diff * velocity_voltage_ratio
+  simple_peak_velocity = simple_voltage_from_diff * velocity_voltage_ratio
+  # print('velocity_uncertain: {:.2f}'.format(right_peak_uncertain + left_peak_uncertain))
+  peak_velocity_matrix[index] = [full_peak_velocity, simple_peak_velocity, left_peak_time, right_peak_time, left_peak_uncertain+right_peak_uncertain]
 
-# Fit the phase of trig function to these velocities
-def velocity(time, phase_velocity):
-  return amp * np.cos(ang_freq * time + phase_transducer + phase_velocity) + shift
+# Fit the full and simple trig function to these velocities
+time_points = np.hstack((peak_velocity_matrix[:, 2], peak_velocity_matrix[:, 3]))
+full_velocity_points = np.hstack((peak_velocity_matrix[:, 0], peak_velocity_matrix[:, 0]))
+simple_velocity_points = np.hstack((peak_velocity_matrix[:, 1], peak_velocity_matrix[:, 1]))
+velocity_error = np.hstack((peak_velocity_matrix[:, 4], peak_velocity_matrix[:, 4]))
 
-phase_change, _ = optimize.curve_fit(velocity, peak_velocity_matrix[:, 0], peak_velocity_matrix[:, 1])
+def full_velocity(time, phase, shift):
+  return velocity_voltage_ratio * full_amp * np.cos(full_ang_freq * time + phase) + shift
 
-print('Phase change: {}'.format(*phase_change))
-print('Velocity at time 0: {}'.format(velocity(0, *phase_change)))
-print(peak_velocity_matrix[0, 1])
-print(peak_velocity_matrix[1, 1])
+full_param_list, _ = optimize.curve_fit(full_velocity, time_points, full_velocity_points, p0=[0, 0])
+full_chi2 = np.sum(np.square(np.divide(np.subtract(full_velocity_points, full_velocity(time_points, *full_param_list)), velocity_error)))
+
+def simple_velocity(time, phase):
+  return velocity_voltage_ratio * simple_amp * np.cos(simple_ang_freq * time + phase)
+
+simple_phase, _ = optimize.curve_fit(simple_velocity, time_points, simple_velocity_points, p0=[-0.1], sigma=velocity_error)
+simple_chi2 = np.sum(np.square(np.divide(np.subtract(simple_velocity_points, simple_velocity(time_points, *simple_phase)), velocity_error)))
+simple_chi2_no_phase = np.sum(np.square(np.divide(np.subtract(simple_velocity_points, simple_velocity(time_points, 0)), velocity_error)))
+
+print('Simple phase: {}\nVelocity (phase, shift): {}'.format(*simple_phase, full_param_list))
+print('Simple chi2: {}\n simple chi2 no phase: {}\nVel chi2: {}'.format(simple_chi2, simple_chi2_no_phase, full_chi2))
 
 # Check fit to these points
 fig3, ax3 = plt.subplots()
-ax3.scatter(peak_velocity_matrix[:, 0], peak_velocity_matrix[:, 1], label='Velocity set by diff')
+
+# Plot the velocity-time points given by the difference function
+ax3.errorbar(x=time_points, y=full_velocity_points, yerr=velocity_error, label='Velocity from diff', color='red', fmt='.', capsize=2)
+ax3.hlines(peak_velocity_matrix[:, 0], peak_velocity_matrix[:, 2], peak_velocity_matrix[:, 3], ls='dashed', lw=0.7)
+ax3.errorbar(x=time_points, y=simple_velocity_points, yerr=velocity_error, label='Velocity from diff', color='green', fmt='.', capsize=2)
+ax3.hlines(peak_velocity_matrix[:, 1], peak_velocity_matrix[:, 2], peak_velocity_matrix[:, 3], ls='dashed', lw=0.7)
+
+# Plot the functions
 time_points = np.linspace(min(time_arr), max(time_arr), 10000)
-ax3.plot(time_points, velocity(time_points, *phase_change), label='Fitted velocity trig', color='orange')
-# for index in range(num_distinct_peaks):
-# ax3.hlines(peak_velocity_matrix[0, 1], peak_velocity_matrix[0, 0], peak_velocity_matrix[0, 2], ls='dashed', label='Diff line 1')
-# ax3.hlines(peak_velocity_matrix[1, 1], peak_velocity_matrix[1, 0], peak_velocity_matrix[1, 2], ls='dashed', label='Diff line 2', color='red', lw=10)
+ax3.plot(time_points, full_velocity(time_points, *full_param_list), label=r'Full voltage fit $\chi^2$ = {:.4f}'.format(full_chi2))
+ax3.plot(time_points, simple_velocity(time_points, simple_phase), label=r'Simple voltage fit $\chi^2$ = {:.4f}'.format(simple_chi2))
+
 ax3.set_title('Velocity vs. Time')
 ax3.set_yscale("linear")
 ax3.set_xscale("linear")
@@ -127,6 +152,10 @@ fig3.savefig('{}/{}_vel_phase_check.png'.format(folder_name[:-1], folder_name[:-
 fig3.show()
 input("hit[enter] to close all plots")
 plt.close('all')
+
+# Map velocity to energy
+
+
 
 exit()
 
