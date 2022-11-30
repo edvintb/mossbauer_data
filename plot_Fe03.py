@@ -8,23 +8,16 @@ import re
 
 # Define folder and peak information for our data
 
-# TODO: Stainless steel
+# TODO: Fe03
 folder_name = "Fe03/"
-number_peaks = 2
-fit_range = np.asarray([(0.0001, 0.015), (0.009, 0.0195)])
-approximate_positions = np.asarray([0.006, 0.0175])
-approximate_amplitude = np.asarray([-60000, -60000])
-approximate_width = np.asarray([0.0005, 0.0005])
-approximate_offset = 149200 * np.ones(number_peaks)
+number_peaks = 12
 
-# TODO: FeF2_84.6K
-# folder_name = 'FeF2_84.6K/'
-# number_peaks = 4
-# fit_range = np.asarray([(0.0025, 0.0075), (0.0030, 0.0080), (0.0150, 0.0200), (0.0150, 0.0200)])
-# approximate_positions = np.asarray([0.005, 0.006, 0.0174, 0.0180])
-# approximate_amplitude = np.asarray([-20000, -20000, -20000, -20000])
-# approximate_width = np.asarray([0.0005, 0.0005, 0.0005, 0.0005])
-# approximate_offset = 14500 * np.ones(number_peaks)
+fit_range = np.asarray([(0.0001, 0.0035), (0.0035, 0.0045), (0.0045, 0.0057), (0.0055, 0.0065), (0.0065, 0.0075), (0.0075, 0.0125), (0.01, 0.0155), (0.0155, 0.0165), (0.0164, 0.0173), (0.0172, 0.0183), (0.0185, 0.0195), (0.0190, 0.0200)])
+approximate_positions = np.asarray([0.003, 0.004, 0.0054, 0.0062, 0.007, 0.0085, 0.0145, 0.0160, 0.0170, 0.0177, 0.0180, 0.0199])
+approximate_amplitude = np.asarray([-2500, -1800, -1000, -1000, -1800, -2500, -2500, -1800, -1000, -1300, -1800, -2500])
+approximate_width = np.asarray([0.0005, 0.0005, 0.0005, 0.0005, 0.0005, 0.0005, 0.0005, 0.0005, 0.0005, 0.0001, 0.0005, 0.0005])
+
+approximate_offset = 23000 * np.ones(number_peaks)
 
 param_matrix = np.transpose(np.vstack((approximate_positions, approximate_amplitude, approximate_width, approximate_offset)))
 
@@ -48,20 +41,32 @@ ax1.grid(alpha=0.25)
 fig1.savefig('{}/{}_counts_time.png'.format(folder_name[:-1], folder_name[:-1]))
 fig1.show()
 plt.pause(0.001)
-input("hit[enter] to close/continue all plots")
-plt.close('all')
-exit()
+# input("hit[enter] to close/continue all plots")
+# plt.close('all')
+# exit()
 
 
 # Define and fit Lorentzian
 def lorentzian(data, E0, amplitude, Gamma, offset):
   return amplitude * (Gamma / ((data - E0)**2 + (Gamma / 2)**2)) + offset
 
+def lorentzian_sum(data, param_matrix):
+  count = 0
+  # Change normalize offset guess
+  param_matrix[: , -1] = param_matrix[:, -1] / np.shape(param_matrix)[0]
+  for row in param_matrix:
+    count =+ lorentzian(data, *row)
+  return count
+
 opt_param_matrix = np.zeros(np.shape(param_matrix))
 cov_matrix = np.zeros(shape=(np.shape(param_matrix)[0], np.shape(param_matrix)[1], np.shape(param_matrix)[1]))
 chi2_matrix = np.zeros(shape=(number_peaks, 2))
+
 for index in range(number_peaks):
-  time_to_fit = [time for time in time_arr if time >= fit_range[index][0] and time <= fit_range[index][1]]
+  print(index)
+  # if index == 8:
+  #   continue
+  time_to_fit = [time for time in time_arr if time >= min(fit_range[index]) and time <= max(fit_range[index])]
   start_index = np.where(time_arr == time_to_fit[0])[0][0]
   stop_index =  np.where(time_arr == time_to_fit[-1])[0][0] + 1
   counts_to_fit = total_count_arr[start_index:stop_index]
@@ -71,6 +76,18 @@ for index in range(number_peaks):
   deg_of_freedom = len(time_to_fit) - np.shape(param_matrix)[1]
   reduced_chi2 = chi2 / deg_of_freedom
   chi2_matrix[index] = [chi2, reduced_chi2]
+
+# Fit a sum of lorentzians
+num_groups = 2
+sum_param_marix = np.zeros(np.shape(param_matrix))
+sum_cov_matrix = np.zeros(shape=(np.shape(param_matrix)[0], np.shape(param_matrix)[1], np.shape(param_matrix)[1]))
+sum_chi2_marix = np.zeros(shape=(number_peaks, 2))
+group_index_list = [(0, 5), (5, 11)]
+sum_fit_range = [(0.001, 0.0125), (0.01, 0.02)]
+
+# for index_group in group_index_list:
+  # sum_param_matrix[index], sum_cov_matrix[index] = optimize.curve_fit(lorentzian_sum, time_to_fit, counts_to_fit, param_matrix[index], sigma=count_std_dev)
+
 
 # Plot data to check fits
 fig2, ax2 = plt.subplots(figsize=(12, 8))
@@ -205,6 +222,7 @@ fig4.savefig('{}/{}_energy_shift_overlap.png'.format(folder_name[:-1], folder_na
 fig4.show()
 # input("hit[enter] to close all plots")
 # plt.close('all')
+# exit()
 
 # Add counts for 'same' energy
 energy_shift_list = np.asarray(energy_shift_from_time(time_arr))
@@ -226,22 +244,24 @@ unique_time_list = time_arr[:np.shape(unique_shift_list)[0]]
 unique_count_list = total_count_arr[:np.shape(unique_shift_list)[0]]
 
 # Convert lorentzian parameters from earlier estimate
-energy_param_matrix = param_matrix[:num_distinct_peaks][:]
+energy_param_matrix = opt_param_matrix[:num_distinct_peaks, :]
 energy_param_matrix[:, 0] = energy_shift_from_time(energy_param_matrix[:, 0]) 
 energy_param_matrix[:, 2] = energy_shift_from_time(energy_param_matrix[:, 2]) 
 energy_range = np.asarray([(energy_shift_from_time(time[0]), energy_shift_from_time(time[1])) for time in fit_range[:num_distinct_peaks]])
 
-
-# print(energy_param_matrix)
-# energy_range = np.asarray([(-5 * pow(10, -7), 0.5 * pow(10, -7)), (0.5 * pow(10, -7), 5 * pow(10, -7))])
-# energy_param_matrix[:, 0] = approximate_positions = np.asarray([-0.02 * pow(10, -7), 1 * pow(10, -7)])
-# energy_param_matrix[:, 2] = approximate_width = np.asarray([0.1 * pow(10, -7), 0.1 * pow(10, -7)])
+# print('parameters for peak 5: {}'.format(energy_param_matrix[5]))
+energy_range = np.asarray([(-5 * pow(10, -7), 0.5 * pow(10, -7)), (0.5 * pow(10, -7), 5 * pow(10, -7))])
+energy_param_matrix[:, 0] = approximate_positions = pow(10, -7) * np.asarray([-3.5, -2, -0.5 , 1 , 2 , 3.8])
+energy_param_matrix[:, 2] = approximate_width = pow(10, -7) * np.asarray([0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
 
 # Perform fit like earlier, but to the energy data
 opt_energy_param_matrix = np.zeros(np.shape(energy_param_matrix))
 energy_cov_matrix = np.zeros(shape=(np.shape(energy_param_matrix)[0], np.shape(energy_param_matrix)[1], np.shape(energy_param_matrix)[1]))
 chi2_matrix = np.zeros(shape=(num_distinct_peaks, 2))
 for index in range(num_distinct_peaks):
+  if index == 3 or index == 4:
+    continue
+  print(index)
   energy_to_fit = [energy for energy in unique_shift_list if energy >= min(energy_range[index]) and energy <= max(energy_range[index])]
   # print('Energy to fit: {}'.format(energy_to_fit))
   # print(np.where(unique_shift_list == energy_to_fit[0]))
@@ -249,6 +269,7 @@ for index in range(num_distinct_peaks):
   stop_index =  np.where(unique_shift_list == energy_to_fit[-1])[0][0] + 1
   # print('indices:')
   # print(start_index, stop_index)
+  print(energy_param_matrix[index])
   counts_to_fit = total_count_arr[start_index:stop_index]
   count_std_dev = np.sqrt(counts_to_fit) # Poission process has variance lambda
   opt_energy_param_matrix[index], energy_cov_matrix[index] = optimize.curve_fit(lorentzian, energy_to_fit, counts_to_fit, energy_param_matrix[index], sigma=count_std_dev)
@@ -286,7 +307,7 @@ energy_points = np.linspace(min(unique_shift_list), max(unique_shift_list), 1000
 fig5, ax5 = plt.subplots(figsize=(12, 8))
 ax5.errorbar(unique_shift_list, unique_count_list, yerr=yerr, xerr=xerr, fmt='.', capsize=3, label='Count data')
 for index in range(num_distinct_peaks):
-  ax5.plot(energy_points, lorentzian(energy_points, *opt_energy_param_matrix[index]), label=r'$\chi^2$: {:.2g}, $\chi^2_{{\nu}}$: {:.2g}'.format(*chi2_matrix[index]))
+  ax5.plot(energy_points, lorentzian(energy_points, *opt_energy_param_matrix[index]), label=r'$\chi^2$: {:.2g}, $\chi^2_{{\nu}}$: {:.2g} - {}'.format(*chi2_matrix[index], index))
 ax5.set_title(r'Count vs. $\Delta E$')
 ax5.set_yscale("linear") 
 ax5.set_xscale("linear")
