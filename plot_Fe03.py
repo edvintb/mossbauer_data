@@ -9,24 +9,24 @@ import re
 # Define folder and peak information for our data
 
 # TODO: Stainless steel
-# folder_name = "stainless_steel/"
-# number_peaks = 2
-# fit_range = np.asarray([(0.0001, 0.015), (0.009, 0.0195)])
-# approximate_positions = np.asarray([0.006, 0.0175])
-# approximate_amplitude = np.asarray([-60000, -60000])
-# approximate_width = np.asarray([0.0005, 0.0005])
-# approximate_offset = 149200 * np.ones(number_peaks)
+folder_name = "Fe03/"
+number_peaks = 2
+fit_range = np.asarray([(0.0001, 0.015), (0.009, 0.0195)])
+approximate_positions = np.asarray([0.006, 0.0175])
+approximate_amplitude = np.asarray([-60000, -60000])
+approximate_width = np.asarray([0.0005, 0.0005])
+approximate_offset = 149200 * np.ones(number_peaks)
 
 # TODO: FeF2_84.6K
-folder_name = 'FeF2_84.6K/'
-number_peaks = 4
-fit_range = np.asarray([(0.0025, 0.0075), (0.0030, 0.0080), (0.0150, 0.0200), (0.0150, 0.0200)])
-approximate_positions = np.asarray([0.005, 0.006, 0.0174, 0.0180])
-approximate_amplitude = np.asarray([-20000, -20000, -20000, -20000])
-approximate_width = np.asarray([0.0005, 0.0005, 0.0005, 0.0005])
-approximate_offset = 14500 * np.ones(number_peaks)
-param_matrix = np.transpose(np.vstack((approximate_positions, approximate_amplitude, approximate_width, approximate_offset)))
+# folder_name = 'FeF2_84.6K/'
+# number_peaks = 4
+# fit_range = np.asarray([(0.0025, 0.0075), (0.0030, 0.0080), (0.0150, 0.0200), (0.0150, 0.0200)])
+# approximate_positions = np.asarray([0.005, 0.006, 0.0174, 0.0180])
+# approximate_amplitude = np.asarray([-20000, -20000, -20000, -20000])
+# approximate_width = np.asarray([0.0005, 0.0005, 0.0005, 0.0005])
+# approximate_offset = 14500 * np.ones(number_peaks)
 
+param_matrix = np.transpose(np.vstack((approximate_positions, approximate_amplitude, approximate_width, approximate_offset)))
 
 # Get data from highest numbered file
 file_ending = '.txt'
@@ -48,9 +48,9 @@ ax1.grid(alpha=0.25)
 fig1.savefig('{}/{}_counts_time.png'.format(folder_name[:-1], folder_name[:-1]))
 fig1.show()
 plt.pause(0.001)
-# input("hit[enter] to close/continue all plots")
-# plt.close('all')
-# exit()
+input("hit[enter] to close/continue all plots")
+plt.close('all')
+exit()
 
 
 # Define and fit Lorentzian
@@ -230,9 +230,12 @@ energy_param_matrix = param_matrix[:num_distinct_peaks][:]
 energy_param_matrix[:, 0] = energy_shift_from_time(energy_param_matrix[:, 0]) 
 energy_param_matrix[:, 2] = energy_shift_from_time(energy_param_matrix[:, 2]) 
 energy_range = np.asarray([(energy_shift_from_time(time[0]), energy_shift_from_time(time[1])) for time in fit_range[:num_distinct_peaks]])
-# energy_range = [(-1 * pow(10, -7), 0)]
-# print('Energy range: {}'.format(energy_range))
-# print('Fit range: {}'.format(fit_range[:num_distinct_peaks]))
+
+
+# print(energy_param_matrix)
+# energy_range = np.asarray([(-5 * pow(10, -7), 0.5 * pow(10, -7)), (0.5 * pow(10, -7), 5 * pow(10, -7))])
+# energy_param_matrix[:, 0] = approximate_positions = np.asarray([-0.02 * pow(10, -7), 1 * pow(10, -7)])
+# energy_param_matrix[:, 2] = approximate_width = np.asarray([0.1 * pow(10, -7), 0.1 * pow(10, -7)])
 
 # Perform fit like earlier, but to the energy data
 opt_energy_param_matrix = np.zeros(np.shape(energy_param_matrix))
@@ -256,9 +259,20 @@ for index in range(num_distinct_peaks):
 
 # TODO: Print this to file in target folder
 print('Position, Amplitude, Width, Vertical Offset')
+# printf('Position, Amplitude, Width, Vertical Offset')
 for index in range(num_distinct_peaks):
   print(opt_energy_param_matrix[index])
   print(np.sqrt(np.diagonal(energy_cov_matrix[index])))
+
+with open(folder_name + folder_name[:-1] + '.csv', 'w') as f:
+  f.write('Position, Amplitude, Width, Vertical Offset, Position std, Amplitude std, Width std, Offset std\n')
+  for index in range(num_distinct_peaks):
+    f.write(np.array2string(opt_energy_param_matrix[index], separator=',', prefix='', suffix=''))
+    f.write(', ')
+    f.write(np.array2string(np.sqrt(np.diagonal(energy_cov_matrix[index])), separator=',', prefix='', suffix=''))
+    f.write('\n')
+    # array_to_write = np.concatenate(np.asarray(opt_energy_param_matrix[index]), np.sqrt(np.diagonal(energy_cov_matrix[index])))
+    # f.write('hello')
 
 # print('Energy range: {}'.format(energy_range))
 # energy_lorentz_params, energy_lorentz_cov = optimize.curve_fit(lorentzian, energy_shift_list, total_count_arr, )

@@ -6,20 +6,34 @@ from scope_fit_11_22 import scope_fit
 import scipy.constants as const
 import re
 
-# Get all files in folder
-folder_name = "stainless_steel/"
-file_ending = '.txt'
-file_list = [file for file in os.listdir(folder_name) if file.endswith(file_ending)]
+# Define folder and peak information for our data
+
+# TODO: Stainless steel
+# folder_name = "stainless_steel/"
+# number_peaks = 2
+# fit_range = np.asarray([(0.0001, 0.015), (0.009, 0.0195)])
+# approximate_positions = np.asarray([0.006, 0.0175])
+# approximate_amplitude = np.asarray([-60000, -60000])
+# approximate_width = np.asarray([0.0005, 0.0005])
+# approximate_offset = 149200 * np.ones(number_peaks)
+
+# TODO: FeF2_84.6K
+folder_name = 'FeF2_84.6K/'
+number_peaks = 4
+fit_range = np.asarray([(0.0025, 0.0075), (0.0030, 0.0080), (0.0150, 0.0200), (0.0150, 0.0200)])
+approximate_positions = np.asarray([0.005, 0.006, 0.0174, 0.0180])
+approximate_amplitude = np.asarray([-20000, -20000, -20000, -20000])
+approximate_width = np.asarray([0.0005, 0.0005, 0.0005, 0.0005])
+approximate_offset = 14500 * np.ones(number_peaks)
+param_matrix = np.transpose(np.vstack((approximate_positions, approximate_amplitude, approximate_width, approximate_offset)))
+
 
 # Get data from highest numbered file
+file_ending = '.txt'
+file_list = [file for file in os.listdir(folder_name) if file.endswith(file_ending)]
 highest_numbered_file = sorted(file_list, key=lambda file: int(re.findall('[0-9]+.txt', file)[0][:-4])).pop()
-print(highest_numbered_file)
+print(highest_numbered_file) # Make sure this is the right file
 time_arr, total_count_arr = np.loadtxt(folder_name + highest_numbered_file, delimiter='\t', skiprows=5, unpack=True)
-
-# Aggregate data from all the files
-# for file in file_list:
-#   count_array = np.loadtxt(folder_name + file, delimiter='\t', skiprows=5, usecols=2, unpack=True)
-#   total_count_arr += count_array
 
 # Plot data to check where fits need to happen
 fig1, ax1 = plt.subplots(figsize=(12, 8))
@@ -38,16 +52,6 @@ plt.pause(0.001)
 # plt.close('all')
 # exit()
 
-# Define peaks and their approximate positions
-number_peaks = 2
-fit_range = np.asarray([(0.0001, 0.015), (0.009, 0.0195)])
-# fit_range = np.asarray([(0, 0.02), (0, 0.02)])
-
-approximate_positions = np.asarray([0.006, 0.0175])
-approximate_amplitude = np.asarray([-60000, -60000])
-approximate_width = np.asarray([0.0005, 0.0005])
-approximate_offset = 149200 * np.ones(number_peaks)
-param_matrix = np.transpose(np.vstack((approximate_positions, approximate_amplitude, approximate_width, approximate_offset)))
 
 # Define and fit Lorentzian
 def lorentzian(data, E0, amplitude, Gamma, offset):
@@ -176,8 +180,16 @@ def energy_shift_from_time(time, phase=0):
   return np.asarray(shift / const.electron_volt)
 
 # Check if the energy dips are overlapping
-time_arr_1, time_arr_2 = np.split(time_arr, 2)
-count_arr_1, count_arr_2 = np.split(total_count_arr, 2)
+half_values = int(len(time_arr) / 2)
+
+time_arr_1 = time_arr[:half_values]
+time_arr_2 = time_arr[half_values:]
+count_arr_1 = total_count_arr[:half_values]
+count_arr_2 = total_count_arr[half_values:]
+
+# time_arr_1, time_arr_2 = np.split(time_arr, 2)
+# count_arr_1, count_arr_2 = np.split(total_count_arr, 2)
+
 fig4, ax4 = plt.subplots(figsize=(12, 8))
 ax4.plot(energy_shift_from_time(time_arr_1) , count_arr_1, label='First time half')
 ax4.plot(energy_shift_from_time(time_arr_2), count_arr_2, label='Second time half')
@@ -218,6 +230,16 @@ energy_param_matrix = param_matrix[:num_distinct_peaks][:]
 energy_param_matrix[:, 0] = energy_shift_from_time(energy_param_matrix[:, 0]) 
 energy_param_matrix[:, 2] = energy_shift_from_time(energy_param_matrix[:, 2]) 
 energy_range = np.asarray([(energy_shift_from_time(time[0]), energy_shift_from_time(time[1])) for time in fit_range[:num_distinct_peaks]])
+
+
+print(energy_param_matrix)
+energy_range = np.asarray([(-5 * pow(10, -7), 0.5 * pow(10, -7)), (0.5 * pow(10, -7), 5 * pow(10, -7))])
+# energy_param_matrix[:, 0] = fit_range = np.asarray([(0.0025, 0.0075), (0.0030, 0.0080), (0.0150, 0.0200), (0.0150, 0.0200)])
+energy_param_matrix[:, 0] = approximate_positions = np.asarray([-0.02 * pow(10, -7), 1 * pow(10, -7)])
+# energy_param_matrix[:, 1] = approximate_amplitude = np.asarray([-20000, -20000, -20000, -20000])
+energy_param_matrix[:, 2] = approximate_width = np.asarray([0.1 * pow(10, -7), 0.1 * pow(10, -7)])
+# energy_param_matrix[:, 3] = approximate_offset = 14500 * np.ones(number_peaks)
+
 # energy_range = [(-1 * pow(10, -7), 0)]
 # print('Energy range: {}'.format(energy_range))
 # print('Fit range: {}'.format(fit_range[:num_distinct_peaks]))
@@ -242,6 +264,7 @@ for index in range(num_distinct_peaks):
   reduced_chi2 = chi2 / deg_of_freedom
   chi2_matrix[index] = [chi2, reduced_chi2]
 
+# TODO: Print this to file in target folder
 print('Position, Amplitude, Width, Vertical Offset')
 for index in range(num_distinct_peaks):
   print(opt_energy_param_matrix[index])
